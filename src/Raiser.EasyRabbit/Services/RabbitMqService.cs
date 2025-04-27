@@ -38,7 +38,7 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
 
     private void ValidateConsumerKey(string consumerConfigKey)
     {
-        IEnumerable<string> requiredSections = [
+        IEnumerable<string> requiredPathValues = [
             $"RabbitMq:Consumers:{consumerConfigKey}:Exchange",
             $"RabbitMq:Consumers:{consumerConfigKey}:Queue"
         ];
@@ -47,9 +47,9 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
             "RoutingKey"
         ];
 
-        foreach (var requiredSection in requiredSections)
-            if (_configuration[requiredSection] is null)
-                throw new SectionNotFoundException(requiredSection);
+        foreach (var requiredValue in requiredPathValues)
+            if (_configuration[requiredValue] is null)
+                throw new SectionNotFoundException(requiredValue);
 
         foreach (var optionalValue in optionalValues)
         {
@@ -63,7 +63,7 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
 
     private void ValidatePublisherKey(string publisherConfigKey)
     {
-        IEnumerable<string> requiredSections = [
+        IEnumerable<string> requiredPathValues = [
             $"RabbitMq:Publishers:{publisherConfigKey}:Exchange"
         ];
 
@@ -71,17 +71,17 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
             "RoutingKey"
         ];
 
-        foreach (var requiredSection in requiredSections)
+        foreach (var requiredSection in requiredPathValues)
             if (_configuration[requiredSection] is null)
                 throw new SectionNotFoundException(requiredSection);
 
         foreach (var optionalValue in optionalValues)
         {
-            var completeSection = $"RabbitMq:Publishers:{publisherConfigKey}:{optionalValue}";
-            var completeDefaultSection = $"RabbitMq:Publishers:Default:{optionalValue}";
+            var completeValuePath = $"RabbitMq:Publishers:{publisherConfigKey}:{optionalValue}";
+            var completeDefaultValuePath = $"RabbitMq:Publishers:Default:{optionalValue}";
 
-            if (_configuration[completeSection] is null && _configuration[completeDefaultSection] is null)
-                throw new SectionNotFoundException(completeSection);
+            if (_configuration[completeValuePath] is null && _configuration[completeDefaultValuePath] is null)
+                throw new SectionNotFoundException(completeValuePath);
         }
     }
 
@@ -132,22 +132,6 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
 
         var channel = await CreateChannelAsync();
         await channel.QueueBindAsync(queue, exchange, routingKey);
-    }
-
-    private void ValidateRequiredSections()
-    {
-        IEnumerable<string> requiredSections = [
-            "RabbitMq",
-            "RabbitMq:Infrastructure",
-            "RabbitMq:Infrastructure:HostName",
-            "RabbitMq:Infrastructure:UserName",
-            "RabbitMq:Infrastructure:Password",
-            "RabbitMq:Infrastructure:Port",
-        ];
-
-        foreach (var requiredSection in requiredSections)
-            if (_configuration[requiredSection] is null)
-                throw new SectionNotFoundException(requiredSection);
     }
 
     private void ValidateExchangeKey(string exchangeConfigKey)

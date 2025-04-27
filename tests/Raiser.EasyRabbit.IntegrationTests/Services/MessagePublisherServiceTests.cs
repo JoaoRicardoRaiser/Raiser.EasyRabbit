@@ -1,12 +1,12 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.Text;
+using System.Text.Json;
+using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Raiser.EasyRabbit.Interfaces;
-using Raiser.EasyRabbit.Extensions;
-using System.Text;
 using RabbitMQ.Client;
-using System.Text.Json;
-using Raiser.EasyRabbit.Workers;
+using Raiser.EasyRabbit.Extensions;
+using Raiser.EasyRabbit.Interfaces;
 using Testcontainers.RabbitMq;
 
 namespace Raiser.EasyRabbit.IntegrationTests.Services;
@@ -14,9 +14,7 @@ namespace Raiser.EasyRabbit.IntegrationTests.Services;
 public class MessagePublisherServiceTests : IAsyncLifetime
 {
     private IHost _host;
-    private IRabbitMqService _rabbitMqService;
     private IConnection _connection;
-    private MessageConsumerWorker<TestClass> _messageConsumerWorker;
 
     private readonly RabbitMqContainer _dbContainer = new RabbitMqBuilder()
             .WithImage("rabbitmq:3-management")
@@ -41,7 +39,6 @@ public class MessagePublisherServiceTests : IAsyncLifetime
                 services.AddEasyRabbitMq();
 
                 services.AddPublisher<TestClass>("Test");
-                services.AddConsumer<TestClass>("Test");
                 
                 services.AddScoped<IMessageHandler<TestClass>, TestClassMessageHandler>();
             })
@@ -49,31 +46,28 @@ public class MessagePublisherServiceTests : IAsyncLifetime
 
         await _host.StartAsync();
 
-        _rabbitMqService = _host.Services.GetRequiredService<IRabbitMqService>();
+        _connection = _host.Services.GetRequiredService<IConnection>();
     }
 
     [Fact]
     public async Task PublishAndConsumeRealMessage()
     {
         // Arrange
-        await _rabbitMqService.ConfigureConsumerAsync("TestConsumer");
-
         var channel = await _connection.CreateChannelAsync();
+        
+        var queue = await channel.QueueDeclareAsync($"queue_test_{Guid.NewGuid()}", true, true, false);
+        await channel.QueueBindAsync(queue.QueueName, "test_exchange", "*");
+
         var message = new TestClass { Name = "Test Name"};
         var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
 
         // Act
         await channel.BasicPublishAsync(exchange: "test_exchange", routingKey: "test_routing_key", body: body);
 
-        await _messageConsumerWorker.StartAsync(CancellationToken.None);
-        await Task.Delay(TimeSpan.FromSeconds(5));
-        await _messageConsumerWorker.StopAsync(CancellationToken.None);
-
-        var messageOnQueue = await channel.BasicGetAsync("test_queue", true);
-
         // Assert
-        Assert.Null(messageOnQueue);
+        var messageOnQueue = await channel.BasicGetAsync(queue.QueueName, true);
 
+        messageOnQueue!.Body.ToString().Should().BeEquivalentTo(body.ToString());
     }
 
     public async Task DisposeAsync()
@@ -83,6 +77,7 @@ public class MessagePublisherServiceTests : IAsyncLifetime
             await _host.StopAsync();
             _host.Dispose();
         }
+
         await _dbContainer.StopAsync();
     }
 }
