@@ -19,8 +19,11 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
     {
         ValidateConsumerKey(consumerConfigKey);
 
-        await DeclareExchangeAsync($"RabbitMq:Consumers:{consumerConfigKey}:Exchange");
-        await DeclareQueueAsync($"RabbitMq:Consumers:{consumerConfigKey}:Queue");
+        var exchange = _configuration[$"RabbitMq:Consumers:{consumerConfigKey}:Exchange"];
+        var queue = _configuration[$"RabbitMq:Consumers:{consumerConfigKey}:Queue"];
+
+        await DeclareExchangeAsync(exchange);
+        await DeclareQueueAsync(queue);
         await BindQueueAsync(
             _configuration[$"RabbitMq:Consumers:{consumerConfigKey}:Exchange"],
             _configuration[$"RabbitMq:Consumers:{consumerConfigKey}:Queue"],
@@ -38,18 +41,17 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
 
     private void ValidateConsumerKey(string consumerConfigKey)
     {
-        IEnumerable<string> requiredPathValues = [
-            $"RabbitMq:Consumers:{consumerConfigKey}:Exchange",
-            $"RabbitMq:Consumers:{consumerConfigKey}:Queue"
+        IEnumerable<string> requiredPaths = [
+            $"RabbitMq:Consumers:{consumerConfigKey}",
         ];
 
         IEnumerable<string> optionalValues = [
             "RoutingKey"
         ];
 
-        foreach (var requiredValue in requiredPathValues)
-            if (_configuration[requiredValue] is null)
-                throw new SectionNotFoundException(requiredValue);
+        foreach (var requiredPath in requiredPaths)
+            if (_configuration.GetSection(requiredPath) is null)
+                throw new SectionNotFoundException(requiredPath);
 
         foreach (var optionalValue in optionalValues)
         {
@@ -122,13 +124,14 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
 
     private async Task BindQueueAsync(string exchange, string queue, string routingKey)
     {
-        var exchangeSection = _configuration[$"RabbitMq:Exchanges:{exchange}"];
-        if (exchangeSection == null)
-            throw new SectionNotFoundException(exchangeSection);
+        var exchangeSectionPath = $"RabbitMq:Exchanges:{exchange}";
 
-        var queueSection = _configuration[$"RabbitMq:Queues:{queue}"];
-        if (queueSection == null)
-            throw new SectionNotFoundException(queueSection);
+        _ = _configuration.GetSection(exchangeSectionPath)
+            ?? throw new SectionNotFoundException(exchangeSectionPath);
+
+        var queueSectionPath = $"RabbitMq:Queues:{queue}";
+        _ = _configuration.GetSection(queueSectionPath) ??
+            throw new SectionNotFoundException(queueSectionPath);
 
         var channel = await CreateChannelAsync();
         await channel.QueueBindAsync(queue, exchange, routingKey);
@@ -173,7 +176,7 @@ public class RabbitMqService(IConfiguration configuration, IConnection connectio
         ];
 
         foreach (var requiredSection in requiredSections)
-            if (_configuration[requiredSection] is null)
+            if (_configuration.GetSection(requiredSection) is null)
                 throw new SectionNotFoundException(requiredSection);
 
         foreach (var optionalValue in optionalValues)

@@ -50,7 +50,12 @@ public static class IServiceCollectionExtensions
     {
         var serviceProvider = services.BuildServiceProvider();
 
-        services.AddSingleton<IMessageConsumerService<T>>(new MessageConsumerService<T>(serviceProvider.GetRequiredService<IServiceScopeFactory>(), consumerConfigKey));
+        services.AddSingleton<IMessageConsumerService<T>>(new MessageConsumerService<T>(
+            serviceProvider.GetRequiredService<IConfiguration>(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(), 
+            serviceProvider.GetRequiredService<IRabbitMqService>(), 
+            consumerConfigKey));
+
         services.AddHostedService<MessageConsumerWorker<T>>();
 
         return services;

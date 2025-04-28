@@ -42,10 +42,20 @@ namespace Raiser.EasyRabbit.IntegrationTests.Fixtures
 
             var result = await channel.BasicGetAsync(queueName, false);
 
-            var body = (result?.Body.ToArray()) ?? throw new Exception($"Has error on get message from queue: {queueName}");
+            if (result == null)
+                return default;
+
+            var body = (result!.Body.ToArray());
             var text = System.Text.Encoding.UTF8.GetString(body);
 
             return JsonConvert.DeserializeObject<T>(text);
+        }
+
+        public async Task<uint?> GetCountFromQueueAsync(string queueName)
+        {
+            var channel = await RabbitMqService.CreateChannelAsync();
+            return await channel.MessageCountAsync(queueName);
+
         }
     }
 }

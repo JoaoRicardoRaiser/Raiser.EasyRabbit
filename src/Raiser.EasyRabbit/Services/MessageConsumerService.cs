@@ -9,21 +9,29 @@ using System.Threading.Tasks;
 
 namespace Raiser.EasyRabbit.Services;
 
-public class MessageConsumerService<T>(IServiceScopeFactory serviceScopeFactory, string consumerConfigKey) : IMessageConsumerService<T>
+public class MessageConsumerService<T> : IMessageConsumerService<T>
 {
-    private readonly IServiceScopeFactory _serviceScopeFactory = serviceScopeFactory;
+    private readonly string _queue;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IRabbitMqService _rabbitMqService;
+
+    public MessageConsumerService(IConfiguration configuration, IServiceScopeFactory serviceScopeFactory, IRabbitMqService rabbitMqService, string consumerConfigKey)
+    {
+        _serviceScopeFactory = serviceScopeFactory;
+        _rabbitMqService = rabbitMqService;
+
+        _rabbitMqService.ConfigureConsumerAsync(consumerConfigKey);
+        
+        _queue = configuration[$"RabbitMq:Consumers:{consumerConfigKey}:Queue"];
+    }
 
     public async Task ConsumeAsync()
     {
         var scope = _serviceScopeFactory.CreateScope();
 
-        var rabbitMqService = scope.ServiceProvider.GetRequiredService<IRabbitMqService>();
-
-        await rabbitMqService.ConfigureConsumerAsync(consumerConfigKey);
-
         var messageHandler = scope.ServiceProvider.GetRequiredService<IMessageHandler<T>>();
         
-        var channel = await rabbitMqService.CreateChannelAsync();
+        var channel = await _rabbitMqService.CreateChannelAsync();
         var consumer = new AsyncEventingBasicConsumer(channel);
 
         consumer.ReceivedAsync += async (model, ea) =>
@@ -46,9 +54,6 @@ public class MessageConsumerService<T>(IServiceScopeFactory serviceScopeFactory,
             }
         };
 
-        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        var queue = configuration[$"RabbitMq:Consumers:{consumerConfigKey}:Queue"];
-
-        await channel.BasicConsumeAsync(queue: queue, autoAck: false, consumer: consumer);
+        await channel.BasicConsumeAsync(queue: _queue, autoAck: false, consumer: consumer);
     }
 }
